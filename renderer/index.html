@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>视频会议系统</title>
+  <link rel="stylesheet" href="css/login.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 品牌标识 -->
+    <div class="brand">
+      <img src="../assets/images/logo.png" alt="视频会议系统" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik03IDlhMiAyIDAgMCAxIDItMmg2YTIgMiAwIDAgMSAyIDJ2NmEyIDIgMCAwIDEtMiAySDlhMiAyIDAgMCAxLTItMlY5WiIgc3Ryb2tlPSIjMDA4ZmZmIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMTcgOGwyLTJhMSAxIDAgMCAxIDEuNDEgMEwyMiA3LjU5YTEgMSAwIDAgMSAwIDEuNDFMMjAgMTFtLTQgNWw0LjUtNC41IiBzdHJva2U9IiMwMDhmZmYiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg=='">
+      <h1>视频会议系统</h1>
+    </div>
+    
+    <!-- 表单卡片 - 包含登录和注册 -->
+    <div class="form-card">
+      <div class="form-slider">
+        <!-- 登录表单 -->
+        <div class="form-section" id="loginSection">
+          <h2 class="form-title">登录</h2>
+          
+          <form id="loginForm">
+            <div class="input-group">
+              <input type="text" id="username" name="username" placeholder="用户名或邮箱" required>
+            </div>
+            
+            <div class="input-group">
+              <input type="password" id="password" name="password" placeholder="密码" required>
+            </div>
+            
+            <!-- <div class="remember-forgot">
+              <div class="remember-me">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember">记住我</label>
+              </div>
+              <a href="#" class="forgot-password">忘记密码?</a>
+            </div> -->
+            
+            <button type="submit" class="login-btn">登录</button>
+            
+            <div class="switch-form-link">
+              <a href="#" id="showRegister">创建新账号</a>
+            </div>
+          </form>
+        </div>
+        
+        <!-- 注册表单 -->
+        <div class="form-section" id="registerSection">
+          <h2 class="form-title">注册</h2>
+          
+          <form id="registerForm">
+            <div class="input-group">
+              <input type="text" id="regUsername" name="username" placeholder="用户名" required>
+            </div>
+            
+            <div class="input-group">
+              <input type="password" id="regPassword" name="password" placeholder="密码" required>
+            </div>
+            
+            <div class="input-group">
+              <input type="password" id="regConfirmPassword" name="confirmPassword" placeholder="确认密码" required>
+            </div>
+            
+            <button type="submit" class="register-btn">注册</button>
+            
+            <div class="switch-form-link">
+              <a href="#" id="showLogin">返回登录</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 背景装饰元素 -->
+    <div class="bg-element bg-element-1"></div>
+    <div class="bg-element bg-element-2"></div>
+    <div class="bg-element bg-element-3"></div>
+  </div>
+  
+  <script src="js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,316 @@
+/* 重置和基础样式 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f5f7fa;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 全屏应用容器 */
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4eaf1 100%);
+}
+
+/* 品牌标识 */
+.brand {
+  position: absolute;
+  top: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.logo {
+  width: 60px;
+  height: auto;
+  margin-bottom: 12px;
+}
+
+.brand h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* 表单卡片 */
+.form-card {
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 10;
+}
+
+/* 表单滑块 */
+.form-slider {
+  width: 200%; /* 两倍宽度，容纳两个表单 */
+  display: flex;
+  transition: transform 0.5s ease;
+}
+
+/* 切换到注册表单时的状态 */
+.form-slider.show-register {
+  transform: translateX(-50%);
+}
+
+/* 表单部分 */
+.form-section {
+  width: 50%; /* 占总宽度的一半 */
+  padding: 40px;
+}
+
+.form-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* 输入框组 */
+.input-group {
+  margin-bottom: 20px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #e0e5ec;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.3s;
+  background-color: #f9fafc;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: #0084ff;
+  background-color: white;
+  box-shadow: 0 0 0 3px rgba(0, 132, 255, 0.1);
+}
+
+/* 记住我和忘记密码 */
+.remember-forgot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+.remember-me {
+  display: flex;
+  align-items: center;
+}
+
+.remember-me input[type="checkbox"] {
+  margin-right: 8px;
+  accent-color: #0084ff;
+}
+
+.forgot-password {
+  color: #0084ff;
+  text-decoration: none;
+}
+
+.forgot-password:hover {
+  text-decoration: underline;
+}
+
+/* 按钮样式 */
+.login-btn, .register-btn {
+  width: 100%;
+  padding: 14px;
+  background-color: #0084ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+  box-shadow: 0 4px 10px rgba(0, 132, 255, 0.2);
+}
+
+.login-btn:hover, .register-btn:hover {
+  background-color: #0077e6;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0, 132, 255, 0.25);
+}
+
+.login-btn:active, .register-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px rgba(0, 132, 255, 0.2);
+}
+
+/* 表单切换链接 */
+.switch-form-link {
+  text-align: center;
+  margin-top: 24px;
+}
+
+.switch-form-link a {
+  color: #0084ff;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 15px;
+  transition: color 0.2s;
+}
+
+.switch-form-link a:hover {
+  color: #0069d9;
+}
+
+/* 背景装饰元素 */
+.bg-element {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+.bg-element-1 {
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+  top: -100px;
+  right: 10%;
+  z-index: 1;
+}
+
+.bg-element-2 {
+  width: 400px;
+  height: 400px;
+  background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+  bottom: -200px;
+  left: 5%;
+  z-index: 1;
+}
+
+.bg-element-3 {
+  width: 200px;
+  height: 200px;
+  background: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%);
+  top: 20%;
+  left: 15%;
+  z-index: 1;
+}
+
+/* 通知样式 */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: 350px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  transform: translateX(110%);
+  transition: transform 0.3s ease;
+  z-index: 1000;
+}
+
+.notification.show {
+  transform: translateX(0);
+}
+
+.notification-content {
+  flex: 1;
+}
+
+.notification h4 {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.notification p {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.notification-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #999;
+  padding: 0 0 0 12px;
+}
+
+/* 不同类型的通知 */
+.notification.success {
+  border-left: 4px solid #4CAF50;
+}
+
+.notification.success h4 {
+  color: #4CAF50;
+}
+
+.notification.error {
+  border-left: 4px solid #F44336;
+}
+
+.notification.error h4 {
+  color: #F44336;
+}
+
+/* 适配移动设备 */
+@media (max-width: 480px) {
+  .form-card {
+    width: 90%;
+    max-width: none;
+  }
+  
+  .form-section {
+    padding: 30px 20px;
+  }
+  
+  .brand {
+    top: 20px;
+  }
+  
+  .brand h1 {
+    font-size: 20px;
+  }
+  
+  .logo {
+    width: 50px;
+  }
+  
+  .bg-element-1 {
+    width: 200px;
+    height: 200px;
+  }
+  
+  .bg-element-2 {
+    width: 250px;
+    height: 250px;
+  }
+  
+  .bg-element-3 {
+    width: 120px;
+    height: 120px;
+  }
+}
