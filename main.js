@@ -166,20 +166,20 @@ ipcMain.on('navigate', (event, page) => {
 
 // 离开会议
 ipcMain.on('leave-meeting', () => {
-    // 这里会与后端通信，通知用户离开会议
-    console.log('用户离开会议');
-    
-    // 导航到会议页面
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'meeting.html'));
-  });
+  // 这里会与后端通信，通知用户离开会议
+  console.log('用户离开会议');
   
-  // 获取STUN/TURN服务器信息
-  ipcMain.handle('get-ice-servers', async () => {
-    // 实际应用中应从后端获取这些信息
-    return {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    };
-  });
+  // 导航到会议页面
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'meeting.html'));
+});
+  
+// 获取STUN/TURN服务器信息
+ipcMain.handle('get-ice-servers', async () => {
+  // 实际应用中应从后端获取这些信息
+  return {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
+}); 
