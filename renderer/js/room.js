@@ -75,13 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       hideLoading();
 
       // 添加系统消息
-      const isHost = localStorage.getItem('isMeetingHost') === 'true';
-      addSystemMessage(`已${isHost ? '创建' : '加入'}会议 ${meetingInfo.meetingId}`);
-
-      // 如果是会议创建者，显示特殊标记
-      if (isHost) {
-        localUserName.textContent = '我（' + currentUser.username + '）- 主持人';
-      }
+      addSystemMessage(`已加入房间 ${meetingInfo.meetingId}`);
 
     } catch (error) {
       hideLoading();
@@ -339,8 +333,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       peerConnection.onconnectionstatechange = () => {
         window.electronConsole.log(`与 ${username} 的连接状态改变:`, peerConnection.connectionState);
         if (peerConnection.connectionState === 'connected') {
-          // 发送用户加入房间消息
-          addSystemMessage(`${currentUser.username} 加入了房间`);
+          // 发送建立连接消息
+          addSystemMessage(`与 ${username} 的连接已建立`);
         }
         if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'closed') {
           closePeerConnection(userId);
