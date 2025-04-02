@@ -292,7 +292,7 @@ async function setupLocalMedia() {
       // 遍历房间中的其他用户并创建连接
       roomData.users.forEach(user => {
         if (user.userId !== currentUser.id) {
-          createPeerConnection(user.userId, user.username);
+          createPeerConnectionWithOffer(user.userId, user.username);
         }
       });
     }
@@ -320,6 +320,23 @@ async function setupLocalMedia() {
     
     // 显示系统消息
     addSystemMessage(`${username} 离开了会议`);
+  }
+
+  // 创建与特定用户的WebRTC对等连接并发送offer
+  async function createPeerConnectionWithOffer(userId, username) {
+    await createPeerConnection(userId, username);
+
+    // 作为发起方创建offer
+    const peerConnection = peerConnections[userId].connection;
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    
+    sendToSignalServer('OFFER', {
+      userId: currentUser.id,
+      targetUserId: userId,
+      sdp: peerConnection.localDescription
+    });
   }
   
   // 创建与特定用户的WebRTC对等连接
@@ -374,16 +391,6 @@ async function setupLocalMedia() {
         }
       };
       
-      // 作为发起方创建offer
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      
-      sendToSignalServer('OFFER', {
-        userId: currentUser.id,
-        targetUserId: userId,
-        sdp: peerConnection.localDescription
-      });
-      
       window.electronConsole.log(`已创建与 ${username} (${userId}) 的对等连接`);
       
     } catch (error) {
@@ -400,7 +407,7 @@ async function setupLocalMedia() {
       if (targetUserId === currentUser.id) {
         // 确保与发送方有连接
         if (!peerConnections[userId]) {
-          createPeerConnection(userId, username || 'Unknown User');
+          await createPeerConnection(userId, username || 'Unknown User');
         }
         
         const peerConnection = peerConnections[userId].connection;
@@ -416,7 +423,7 @@ async function setupLocalMedia() {
         sendToSignalServer('ANSWER', {
           userId: currentUser.id,
           targetUserId: userId,
-          sdp: answer.sdp
+          sdp: peerConnection.localDescription
         });
       }
     } catch (error) {
