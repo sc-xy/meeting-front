@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  // DOM 元素
+  // DOM 元素引用
   const meetingIdElement = document.getElementById('meetingId');
   const videoGrid = document.getElementById('videoGrid');
   const localVideo = document.getElementById('localVideo');
@@ -22,222 +22,604 @@ document.addEventListener('DOMContentLoaded', async () => {
   const cancelLeaveBtn = document.getElementById('cancelLeave');
   const confirmLeaveBtn = document.getElementById('confirmLeave');
 
-  // 状态变量
+  // WebRTC相关变量
   let localStream = null;
-  let peers = {};
+  let peerConnections = {};
+  let websocket = null;
   let currentUser = null;
+  let meetingInfo = null;
   let cameraEnabled = true;
   let micEnabled = true;
-  let socketConnection = null;
-  const meetingId = localStorage.getItem('currentMeetingId');
-  const isMeetingHost = localStorage.getItem('isMeetingHost') === 'true';
+  let isConnectionEstablished = false;
+  
+  // WebRTC配置
+  let iceServers = null;
   
   // 初始化
   async function initialize() {
     try {
+      showLoading('正在初始化会议...');
+      
       // 获取当前用户信息
       currentUser = await window.electronAPI.getCurrentUser();
-      if (!currentUser || !meetingId) {
-        alert('会话已过期或会议ID无效，将返回会议中心');
+      
+      // 获取会议信息
+      meetingInfo = await window.electronAPI.getMeetingInfo();
+      
+      // 检查会话和会议有效性
+      if (!currentUser || !meetingInfo) {
+        hideLoading();
+        alert('会话已过期或会议信息无效，将返回会议中心');
         window.electronAPI.navigate('meeting.html');
         return;
       }
       
+      // 获取ICE服务器配置
+      iceServers = await window.electronAPI.getIceServers();
+      
       // 显示会议ID
-      meetingIdElement.textContent = meetingId;
+      meetingIdElement.textContent = meetingInfo.meetingId;
       
       // 设置用户名和头像
       localUserName.textContent = '我（' + currentUser.username + '）';
       localUserInitial.textContent = currentUser.initial;
       localNoVideo.querySelector('.avatar').style.backgroundColor = currentUser.avatarColor;
-
+      
       // 初始化本地媒体流
       await setupLocalMedia();
+
+      // 连接到WebSocket信令服务器
+      await connectWebsocket();
       
-      // 连接到信令服务器 (这里是伪代码，实际需要实现WebSocket连接到后端)
-      connectSignalingServer();
+      // 隐藏加载界面
+      hideLoading();
+      
+      // 添加系统消息
+      const isHost = localStorage.getItem('isMeetingHost') === 'true';
+      addSystemMessage(`已${isHost ? '创建' : '加入'}会议 ${meetingInfo.meetingId}`);
+      
+      // 如果是会议创建者，显示特殊标记
+      if (isHost) {
+        localUserName.textContent = '我（' + currentUser.username + '）- 主持人';
+      }
       
     } catch (error) {
-      console.error('初始化错误:', error);
+      hideLoading();
+      window.electronConsole.error('初始化错误:', error);
       alert('初始化会议时出错：' + error.message);
+      window.electronAPI.navigate('meeting.html');
     }
   }
-
+  
   // 设置本地媒体流
-  async function setupLocalMedia() {
+async function setupLocalMedia() {
+  try {
+    window.electronConsole.log('正在获取本地媒体设备...');
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+    
+    window.electronConsole.log('媒体流获取成功:', localStream);
+    window.electronConsole.log('视频轨道:', localStream.getVideoTracks().length > 0 ? '有' : '无');
+    window.electronConsole.log('音频轨道:', localStream.getAudioTracks().length > 0 ? '有' : '无');
+    
+    // 明确检查localVideo元素
+    if (!localVideo) {
+      window.electronConsole.error('未找到本地视频元素!');
+      return;
+    }
+    
+    // 确保视频元素具有正确的属性
+    localVideo.autoplay = true;
+    localVideo.muted = true;
+    localVideo.playsInline = true;
+    
+    // 设置视频源并确认
+    localVideo.srcObject = localStream;
+    window.electronConsole.log('已将媒体流设置到视频元素', localVideo);
+    
+    // 添加加载和错误事件监听
+    localVideo.onloadedmetadata = () => {
+      window.electronConsole.log('视频元数据已加载');
+      localVideo.play().catch(e => window.electronConsole.error('视频播放失败:', e));
+    };
+    
+    localVideo.onerror = (e) => {
+      window.electronConsole.error('视频元素错误:', e);
+    };
+    
+    // 确保视频可见
+    if (localNoVideo) {
+      localNoVideo.classList.add('hidden');
+    }
+    
+    updateMediaUI();
+    
+  } catch (error) {
+    window.electronConsole.error('获取媒体设备失败:', error);
+    
+    // 如果获取摄像头失败，尝试只获取音频
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      
-      localVideo.srcObject = localStream;
-      
-      // 默认都是开启的
-      updateMediaUI();
-      
-    } catch (error) {
-      console.error('获取媒体设备失败:', error);
-      
-      // 如果获取摄像头失败，显示头像
       cameraEnabled = false;
       updateMediaUI();
       
-      // 尝试只获取音频
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        alert('无法访问摄像头，将只使用麦克风');
-      } catch (audioError) {
-        micEnabled = false;
-        updateMediaUI();
-        alert('无法访问麦克风和摄像头，您将只能接收其他参与者的音视频');
+      window.electronConsole.log('尝试仅获取音频...');
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      alert('无法访问摄像头，将只使用麦克风参与会议');
+      
+    } catch (audioError) {
+      window.electronConsole.error('获取麦克风也失败:', audioError);
+      micEnabled = false;
+      updateMediaUI();
+      alert('无法访问麦克风和摄像头，您将只能接收其他参与者的音视频');
+      
+      // 创建一个空的流，以便WebRTC连接可以正常建立
+      localStream = new MediaStream();
+    }
+  }
+}
+  
+  // 连接到WebSocket信令服务器
+  async function connectWebsocket() {
+    return new Promise((resolve, reject) => {
+      const userId = currentUser.id;
+      const username = currentUser.username;
+      const wsUrl = `ws://localhost:8101/api/websocket/${userId}/${username}`;
+      
+      websocket = new WebSocket(wsUrl);
+      
+      websocket.onopen = () => {
+        window.electronConsole.log('WebSocket连接已建立');
+        
+        // 发送加入房间消息
+        sendToSignalServer('JOIN_ROOM', {
+          userId: userId,
+          meetingId: meetingInfo.meetingId,
+          username: currentUser.username
+        });
+      };
+      
+      websocket.onmessage = (event) => {
+        handleSignalingMessage(event.data);
+      };
+      
+      websocket.onerror = (error) => {
+        window.electronConsole.error('WebSocket错误:', error);
+        reject(new Error('连接信令服务器失败'));
+      };
+      
+      websocket.onclose = () => {
+        window.electronConsole.log('WebSocket连接已关闭');
+        if (!isConnectionEstablished) {
+          reject(new Error('信令服务器连接关闭'));
+        }
+      };
+      
+      // 等待连接建立和加入房间确认
+      let maxRetries = 10;
+      let retryCount = 0;
+      
+      const checkConnection = setInterval(() => {
+        if (isConnectionEstablished) {
+          clearInterval(checkConnection);
+          resolve();
+        } else if (retryCount >= maxRetries) {
+          clearInterval(checkConnection);
+          reject(new Error('连接信令服务器超时'));
+        }
+        retryCount++;
+      }, 1000);
+    });
+  }
+  
+  // 处理来自信令服务器的消息
+  function handleSignalingMessage(message) {
+    try {
+      const data = JSON.parse(message);
+      window.electronConsole.log('收到信令消息:', data);
+      
+      switch (data.eventName) {
+        case 'JOIN_ROOM_SUCCESS':
+          // 加入房间成功
+          isConnectionEstablished = true;
+          window.electronConsole.log('成功加入房间');
+          
+          // 开始与房间中其他用户建立连接
+          initiateConnections(data.data);
+          break;
+          
+        case 'USER_JOINED':
+          // 新用户加入房间
+          handleUserJoined(data.data);
+          break;
+          
+        case 'USER_LEFT':
+          // 用户离开房间
+          handleUserLeft(data.data);
+          break;
+          
+        case 'OFFER':
+          // 收到WebRTC Offer
+          handleOffer(data.data);
+          break;
+          
+        case 'ANSWER':
+          // 收到WebRTC Answer
+          handleAnswer(data.data);
+          break;
+          
+        case 'ICE_CANDIDATE':
+          // 收到ICE候选项
+          handleIceCandidate(data.data);
+          break;
+          
+        case 'MEDIA_STATE_CHANGE':
+          // 用户媒体状态变化（摄像头/麦克风开关）
+          handleMediaStateChange(data.data);
+          break;
+          
+        case 'CHAT_MESSAGE':
+          // 收到聊天消息
+          handleChatMessage(data.data);
+          break;
       }
+    } catch (error) {
+      window.electronConsole.error('处理信令消息出错:', error);
     }
   }
   
-  // 连接信令服务器 (伪代码)
-  function connectSignalingServer() {
-    console.log('连接到信令服务器...');
-    
-    // 这里应该是实际的WebSocket连接代码
-    // socketConnection = new WebSocket(wsUrl);
-    
-    // 模拟连接成功
-    setTimeout(() => {
-      console.log('已连接到信令服务器');
-      // 加入会议房间
-      joinRoom();
-    }, 1000);
-  }
-  
-  // 加入会议房间 (伪代码)
-  function joinRoom() {
-    console.log('加入会议房间:', meetingId);
-    
-    // 这里应该发送加入房间消息给信令服务器
-    // socketConnection.send(JSON.stringify({ type: 'join', roomId: meetingId, userId: currentUser.id }));
-    
-    // 模拟其他参与者 (实际场景中，会从信令服务器收到已在房间中的用户列表)
-    if (!isMeetingHost) {
-      simulateRemoteParticipant('主持人');
-    }
-    
-    // 如果是主持人，等待其他人加入
-    if (isMeetingHost) {
-      // 添加系统消息
-      addSystemMessage('您已创建会议，会议号: ' + meetingId);
+  // 发送消息到信令服务器
+  function sendToSignalServer(eventName, data) {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      const message = {
+        eventName: eventName,
+        data: data
+      };
+      
+      websocket.send(JSON.stringify(message));
     } else {
-      addSystemMessage('您已加入会议');
+      window.electronConsole.error('WebSocket未连接，无法发送消息');
     }
   }
   
-  // 模拟远程参与者加入 (仅用于演示，实际应从信令服务器接收)
-  function simulateRemoteParticipant(name) {
-    setTimeout(() => {
-      const participantId = 'sim-' + Date.now();
-      addRemoteParticipant(participantId, name);
-      
-      // 添加系统消息
-      addSystemMessage(`${name} 加入了会议`);
-    }, 2000);
+  // 初始化与房间中所有用户的连接
+  function initiateConnections(roomData) {
+    if (roomData && roomData.users) {
+      // 遍历房间中的其他用户并创建连接
+      roomData.users.forEach(user => {
+        if (user.userId !== currentUser.id) {
+          createPeerConnection(user.userId, user.username);
+        }
+      });
+    }
   }
   
-  // 添加远程参与者
-  function addRemoteParticipant(id, name) {
-    // 创建视频容器
-    const videoContainer = document.createElement('div');
-    videoContainer.className = 'video-container';
-    videoContainer.id = `participant-${id}`;
+  // 处理新用户加入
+  function handleUserJoined(data) {
+    const { userId, username } = data;
     
-    // 创建视频元素
-    const video = document.createElement('video');
-    video.autoplay = true;
-    video.playsInline = true;
-    video.id = `video-${id}`;
-    
-    // 创建视频覆盖层
-    const videoOverlay = document.createElement('div');
-    videoOverlay.className = 'video-overlay';
-    
-    const participantNameSpan = document.createElement('span');
-    participantNameSpan.className = 'participant-name';
-    participantNameSpan.textContent = name;
-    
-    const mediaIndicators = document.createElement('div');
-    mediaIndicators.className = 'media-indicators';
-    
-    const cameraOffIndicator = document.createElement('span');
-    cameraOffIndicator.className = 'camera-off';
-    cameraOffIndicator.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18.586 20.586L3.414 5.414M2 8C2 7.46957 2.21071 6.96086 2.58579 6.58579C2.96086 6.21071 3.46957 6 4 6H12C12.5304 6 13.0391 6.21071 13.4142 6.58579C13.7893 6.96086 14 7.46957 14 8V16C14 16.48 13.826 16.92 13.538 17.268M6 6H16L22 12V8C22 6.9 21.1 6 20 6H19M4 22H20C20.5304 22 21.0391 21.7893 21.4142 21.4142C21.7893 21.0391 22 20.5304 22 20V11M2 14V16C2 16.5304 2.21071 17.0391 2.58579 17.4142C2.96086 17.7893 3.46957 18 4 18H10" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>';
-    cameraOffIndicator.style.display = 'none';
-    
-    const micOffIndicator = document.createElement('span');
-    micOffIndicator.className = 'mic-off';
-    micOffIndicator.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2L22 22M12 6V12M16 8V11C16 12.0609 15.5786 13.0783 14.8284 13.8284C14.0783 14.5786 13.0609 15 12 15C10.9391 15 9.92172 14.5786 9.17157 13.8284C8.42143 13.0783 8 12.0609 8 11M8 11V8M12 19V22M8 22H16" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    micOffIndicator.style.display = 'none';
-    
-    mediaIndicators.appendChild(cameraOffIndicator);
-    mediaIndicators.appendChild(micOffIndicator);
-    
-    videoOverlay.appendChild(participantNameSpan);
-    videoOverlay.appendChild(mediaIndicators);
-    
-    // 创建无视频时的覆盖层
-    const noVideoOverlay = document.createElement('div');
-    noVideoOverlay.className = 'no-video-overlay hidden';
-    
-    const avatarDiv = document.createElement('div');
-    avatarDiv.className = 'avatar';
-    avatarDiv.style.backgroundColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-    
-    const initialSpan = document.createElement('span');
-    initialSpan.textContent = name.charAt(0).toUpperCase();
-    
-    avatarDiv.appendChild(initialSpan);
-    noVideoOverlay.appendChild(avatarDiv);
-    
-    // 组装所有元素
-    videoContainer.appendChild(video);
-    videoContainer.appendChild(videoOverlay);
-    videoContainer.appendChild(noVideoOverlay);
-    
-    // 添加到视频网格
-    videoGrid.appendChild(videoContainer);
-    
-    // 模拟随机的媒体状态 (仅用于演示)
-    setTimeout(() => {
-      const cameraOn = Math.random() > 0.3;
-      const micOn = Math.random() > 0.3;
+    // 创建与新用户的连接
+    if (userId !== currentUser.id) {
+      createPeerConnection(userId, username);
       
-      if (!cameraOn) {
-        cameraOffIndicator.style.display = 'flex';
-        noVideoOverlay.classList.remove('hidden');
-      }
-      
-      if (!micOn) {
-        micOffIndicator.style.display = 'flex';
-      }
-    }, 1000);
-    
-    // 实际场景中，这里会建立 WebRTC 连接
-    peers[id] = {
-      id,
-      name,
-      // peerConnection: 实际的 RTCPeerConnection 对象
-    };
-    
-    // 模拟视频流 (仅用于演示)
-    simulateVideoStream(video);
+      // 显示系统消息
+      addSystemMessage(`${username} 加入了会议`);
+    }
   }
   
-  // 模拟视频流 (仅用于演示)
-  function simulateVideoStream(videoElement) {
-    // 在实际应用中，视频元素会接收 WebRTC 远程流
-    // 这里只是展示一个占位内容
-    videoElement.poster = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 800 450'%3E%3Crect fill='%23333333' width='800' height='450'/%3E%3Ctext x='400' y='225' font-family='Arial' font-size='30' fill='white' text-anchor='middle' dominant-baseline='middle'%3E远程视频流%3C/text%3E%3C/svg%3E";
+  // 处理用户离开
+  function handleUserLeft(data) {
+    const { userId, username } = data;
+    
+    // 关闭与该用户的连接
+    closePeerConnection(userId);
+    
+    // 显示系统消息
+    addSystemMessage(`${username} 离开了会议`);
+  }
+  
+  // 创建与特定用户的WebRTC对等连接
+  async function createPeerConnection(userId, username) {
+    try {
+      // 如果已存在连接，先关闭
+      if (peerConnections[userId]) {
+        closePeerConnection(userId);
+      }
+      
+      // 创建新的RTCPeerConnection
+      const peerConnection = new RTCPeerConnection(iceServers);
+      
+      // 保存连接
+      peerConnections[userId] = {
+        connection: peerConnection,
+        username: username
+      };
+      
+      // 添加本地流
+      if (localStream) {
+        localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localStream);
+        });
+      }
+      
+      // 处理ICE候选项
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendToSignalServer('ICE_CANDIDATE', {
+            userId: currentUser.id,
+            targetUserId: userId.toString(),
+            candidate: event.candidate
+          });
+        }
+      };
+      
+      // 处理连接状态变化
+      peerConnection.onconnectionstatechange = () => {
+        window.electronConsole.log(`与 ${username} 的连接状态:`, peerConnection.connectionState);
+      };
+      
+      // 处理ICE连接状态变化
+      peerConnection.oniceconnectionstatechange = () => {
+        window.electronConsole.log(`与 ${username} 的ICE连接状态:`, peerConnection.iceConnectionState);
+      };
+      
+      // 处理远程流添加
+      peerConnection.ontrack = (event) => {
+        if (event.streams && event.streams[0]) {
+          handleRemoteStream(event.streams[0], userId, username);
+        }
+      };
+      
+      // 作为发起方创建offer
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      
+      sendToSignalServer('OFFER', {
+        userId: currentUser.id,
+        targetUserId: userId,
+        sdp: peerConnection.localDescription
+      });
+      
+      window.electronConsole.log(`已创建与 ${username} (${userId}) 的对等连接`);
+      
+    } catch (error) {
+      window.electronConsole.error(`创建与 ${username} 的连接出错:`, error);
+    }
+  }
+  
+  // 处理收到的offer
+  async function handleOffer(data) {
+    try {
+      const { userId, targetUserId, sdp, username } = data;
+      
+      // 确保是发给当前用户的
+      if (targetUserId === currentUser.id) {
+        // 确保与发送方有连接
+        if (!peerConnections[userId]) {
+          createPeerConnection(userId, username || 'Unknown User');
+        }
+        
+        const peerConnection = peerConnections[userId].connection;
+        
+        // 设置远程描述
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+        
+        // 创建应答
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        // 发送应答
+        sendToSignalServer('ANSWER', {
+          userId: currentUser.id,
+          targetUserId: userId,
+          sdp: answer.sdp
+        });
+      }
+    } catch (error) {
+      window.electronConsole.error('处理offer出错:', error);
+    }
+  }
+  
+  // 处理收到的answer
+  async function handleAnswer(data) {
+    try {
+      const { userId, targetUserId, sdp } = data;
+      
+      // 确保是发给当前用户的
+      if (targetUserId === currentUser.id && peerConnections[userId]) {
+        const peerConnection = peerConnections[userId].connection;
+        
+        // 设置远程描述
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+      }
+    } catch (error) {
+      window.electronConsole.error('处理answer出错:', error);
+    }
+  }
+  
+  // 处理收到的ICE候选项
+  async function handleIceCandidate(data) {
+    try {
+      const { userId, targetUserId, candidate } = data;
+      
+      // 确保是发给当前用户的
+      if (targetUserId === currentUser.id && peerConnections[userId]) {
+        const peerConnection = peerConnections[userId].connection;
+        
+        // 添加ICE候选项
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    } catch (error) {
+      window.electronConsole.error('处理ICE候选项出错:', error);
+    }
+  }
+  
+  // 处理远程流
+  function handleRemoteStream(stream, userId, username) {
+    window.electronConsole.log(`收到来自 ${username} 的流`);
+    
+    // 检查是否已经有该用户的视频元素
+    let videoContainer = document.getElementById(`participant-${userId}`);
+    
+    if (!videoContainer) {
+      // 创建新的视频容器
+      videoContainer = document.createElement('div');
+      videoContainer.className = 'video-container';
+      videoContainer.id = `participant-${userId}`;
+      
+      // 生成一个随机颜色（或基于用户ID生成一致的颜色）
+      const avatarColor = colorFromUserId(userId);
+      const userInitial = username.charAt(0).toUpperCase();
+      
+      videoContainer.innerHTML = `
+        <video id="video-${userId}" autoplay playsinline></video>
+        <div class="video-overlay">
+          <span class="participant-name">${username}</span>
+          <div class="media-indicators">
+            <span class="indicator camera-off hidden" id="camera-off-${userId}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="indicator mic-off hidden" id="mic-off-${userId}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6L18 18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+        <div class="no-video-overlay hidden" id="no-video-${userId}">
+          <div class="avatar" style="background-color: ${avatarColor};">
+            <span>${userInitial}</span>
+          </div>
+        </div>
+      `;
+      
+      videoGrid.appendChild(videoContainer);
+    }
+    
+    // 设置视频源
+    const videoElement = document.getElementById(`video-${userId}`);
+    if (videoElement) {
+      videoElement.srcObject = stream;
+      
+      // 检查流中是否有视频轨道
+      const hasVideoTrack = stream.getVideoTracks().length > 0;
+      const hasAudioTrack = stream.getAudioTracks().length > 0;
+      
+      // 更新视频状态
+      updateRemoteVideoState(userId, hasVideoTrack);
+      
+      // 更新音频状态
+      updateRemoteAudioState(userId, hasAudioTrack);
+      
+      // 监听轨道添加/删除事件
+      stream.onaddtrack = (event) => {
+        if (event.track.kind === 'video') {
+          updateRemoteVideoState(userId, true);
+        } else if (event.track.kind === 'audio') {
+          updateRemoteAudioState(userId, true);
+        }
+      };
+      
+      stream.onremovetrack = (event) => {
+        if (event.track.kind === 'video') {
+          updateRemoteVideoState(userId, false);
+        } else if (event.track.kind === 'audio') {
+          updateRemoteAudioState(userId, false);
+        }
+      };
+    }
+  }
+  
+  // 更新远程用户视频状态
+  function updateRemoteVideoState(userId, hasVideo) {
+    const noVideoOverlay = document.getElementById(`no-video-${userId}`);
+    const cameraOffIndicator = document.getElementById(`camera-off-${userId}`);
+    
+    if (hasVideo) {
+      noVideoOverlay.classList.add('hidden');
+      cameraOffIndicator.classList.add('hidden');
+    } else {
+      noVideoOverlay.classList.remove('hidden');
+      cameraOffIndicator.classList.remove('hidden');
+    }
+  }
+  
+  // 更新远程用户音频状态
+  function updateRemoteAudioState(userId, hasAudio) {
+    const micOffIndicator = document.getElementById(`mic-off-${userId}`);
+    
+    if (hasAudio) {
+      micOffIndicator.classList.add('hidden');
+    } else {
+      micOffIndicator.classList.remove('hidden');
+    }
+  }
+  
+  // 处理用户媒体状态变化
+  function handleMediaStateChange(data) {
+    const { userId, videoEnabled, audioEnabled } = data;
+    
+    if (userId !== currentUser.id) {
+      updateRemoteVideoState(userId, videoEnabled);
+      updateRemoteAudioState(userId, audioEnabled);
+    }
+  }
+  
+  // 处理聊天消息
+  function handleChatMessage(data) {
+    const { userId, username, message, timestamp } = data;
+    
+    // 添加消息到聊天区域
+    addChatMessage(username, message, false);
+    
+    // 如果聊天面板未打开，可以显示一个提示
+    if (!chatPanel.classList.contains('active')) {
+      // 闪烁聊天按钮或显示未读消息指示器
+      toggleChatBtn.classList.add('has-new-message');
+      
+      // 可以考虑显示一个通知
+      showNotification(`${username}发来消息`, message);
+    }
+  }
+  
+  // 显示桌面通知
+  function showNotification(title, body) {
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body });
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          new Notification(title, { body });
+        }
+      });
+    }
+  }
+  
+  // 关闭与特定用户的连接
+  function closePeerConnection(userId) {
+    if (peerConnections[userId]) {
+      const { connection, username } = peerConnections[userId];
+      
+      if (connection) {
+        connection.close();
+      }
+      
+      delete peerConnections[userId];
+      
+      // 移除视频元素
+      const videoContainer = document.getElementById(`participant-${userId}`);
+      if (videoContainer) {
+        videoContainer.remove();
+      }
+      
+      window.electronConsole.log(`已关闭与 ${username} (${userId}) 的连接`);
+    }
   }
   
   // 更新媒体控制UI
@@ -264,106 +646,156 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 如果有本地流，更新实际设备状态
     if (localStream) {
+
       // 更新视频轨道状态
-      if (localStream.getVideoTracks().length > 0) {
-        localStream.getVideoTracks()[0].enabled = cameraEnabled;
-      }
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = cameraEnabled;
+      });
       
       // 更新音频轨道状态
-      if (localStream.getAudioTracks().length > 0) {
-        localStream.getAudioTracks()[0].enabled = micEnabled;
-      }
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = micEnabled;
+      });
+    }
+    
+    // 通知其他参与者媒体状态变化
+    if (isConnectionEstablished) {
+      sendToSignalServer('MEDIA_STATE_CHANGE', {
+        userId: currentUser.id,
+        videoEnabled: cameraEnabled,
+        audioEnabled: micEnabled
+      });
     }
   }
   
-  // 添加系统消息到聊天
-  function addSystemMessage(message) {
+  // 添加聊天消息
+  function addChatMessage(sender, content, isLocal = false) {
+    const messageElement = document.createElement('div');
+    messageElement.className = `chat-message ${isLocal ? 'outgoing' : 'incoming'}`;
+    
+    messageElement.innerHTML = `
+      <div class="sender">${sender}</div>
+      <div class="content">${content}</div>
+    `;
+    
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+  
+  // 添加系统消息
+  function addSystemMessage(content) {
     const messageElement = document.createElement('div');
     messageElement.className = 'system-message';
-    messageElement.innerHTML = `<p>${message}</p>`;
-    chatMessages.appendChild(messageElement);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }
-  
-  // 添加聊天消息
-  function addChatMessage(sender, content, isOutgoing = false) {
-    const messageElement = document.createElement('div');
-    messageElement.className = `chat-message ${isOutgoing ? 'outgoing' : 'incoming'}`;
-    
-    const senderElement = document.createElement('div');
-    senderElement.className = 'sender';
-    senderElement.textContent = sender;
-    
-    const contentElement = document.createElement('div');
-    contentElement.className = 'content';
-    contentElement.textContent = content;
-    
-    messageElement.appendChild(senderElement);
-    messageElement.appendChild(contentElement);
+    messageElement.innerHTML = `<p>${content}</p>`;
     
     chatMessages.appendChild(messageElement);
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
   
-  // 发送聊天消息 (伪代码)
-  function sendChatMessage(message) {
-    if (!message.trim()) return;
+  // 发送聊天消息
+  function sendChatMessage() {
+    const message = messageInput.value.trim();
+    if (!message) return;
     
-    // 添加到本地聊天
-    addChatMessage('我', message, true);
+    // 添加本地消息到聊天窗口
+    addChatMessage(`我 (${currentUser.username})`, message, true);
     
-    // 实际应用中，应将消息发送到信令服务器
-    console.log('发送消息:', message);
-    // socketConnection.send(JSON.stringify({ type: 'chat', roomId: meetingId, sender: currentUser.username, message }));
+    // 通过信令服务器发送消息
+    sendToSignalServer('CHAT_MESSAGE', {
+      userId: currentUser.id,
+      username: currentUser.username,
+      message: message,
+      timestamp: new Date().toISOString()
+    });
     
     // 清空输入框
     messageInput.value = '';
-    
-    // 模拟收到回复 (仅用于演示)
-    setTimeout(() => {
-      addChatMessage(isMeetingHost ? '参与者' : '主持人', '收到你的消息: ' + message);
-    }, 1000);
   }
   
   // 离开会议
   function leaveMeeting() {
+    // 发送离开房间的消息
+    if (isConnectionEstablished) {
+      sendToSignalServer('LEAVE_ROOM', {
+        userId: currentUser.id,
+        meetingId: meetingInfo.meetingId
+      });
+    }
+    
     // 关闭所有对等连接
-    Object.keys(peers).forEach(peerId => {
-      // 如果有实际的 RTCPeerConnection，应该在这里关闭
-      // if (peers[peerId].peerConnection) {
-      //   peers[peerId].peerConnection.close();
-      // }
+    Object.keys(peerConnections).forEach(peerId => {
+      closePeerConnection(peerId);
     });
     
-    // 关闭本地媒体流
+    // 关闭WebSocket连接
+    if (websocket) {
+      websocket.close();
+    }
+    
+    // 停止本地媒体流
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
     
-    // 关闭信令连接
-    // if (socketConnection) {
-    //   socketConnection.close();
-    // }
-    
-    // 清除会议信息
-    localStorage.removeItem('currentMeetingId');
-    localStorage.removeItem('isMeetingHost');
-    
-    // 导航回会议中心页面
+    // 返回会议中心页面
     window.electronAPI.leaveMeeting();
+  }
+  
+  // 工具函数：根据用户ID生成一致的颜色
+  function colorFromUserId(userId) {
+    let hash = 0;
+    for (let i = 0; i < userId.length; i++) {
+      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const hue = hash % 360;
+    return `hsl(${hue}, 70%, 60%)`;
+  }
+  
+  // 显示加载状态
+  function showLoading(message) {
+    const loadingOverlay = document.createElement('div');
+    loadingOverlay.className = 'loading-overlay active';
+    loadingOverlay.id = 'loadingOverlay';
+    
+    loadingOverlay.innerHTML = `
+      <div class="spinner"></div>
+      <p id="loadingText">${message || '正在加载...'}</p>
+    `;
+    
+    document.body.appendChild(loadingOverlay);
+  }
+  
+  // 隐藏加载状态
+  function hideLoading() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+      loadingOverlay.remove();
+    }
   }
   
   // 事件监听器
   
   // 复制会议ID
-  copyMeetingIdBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(meetingId)
-      .then(() => {
-        alert('会议ID已复制到剪贴板');
-      })
-      .catch(err => {
-        console.error('复制失败:', err);
-      });
+  copyMeetingIdBtn.addEventListener('click', async () => {
+    const meetingIdText = meetingIdElement.textContent;
+    
+    try {
+      await navigator.clipboard.writeText(meetingIdText);
+      
+      // 显示提示
+      const originalTitle = copyMeetingIdBtn.title;
+      copyMeetingIdBtn.title = '已复制!';
+      copyMeetingIdBtn.style.color = '#4CAF50';
+      
+      setTimeout(() => {
+        copyMeetingIdBtn.title = originalTitle;
+        copyMeetingIdBtn.style.color = '';
+      }, 2000);
+    } catch (err) {
+      window.electronConsole.error('复制失败:', err);
+      alert('复制会议ID失败，请手动复制');
+    }
   });
   
   // 切换摄像头
@@ -381,6 +813,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 打开/关闭聊天面板
   toggleChatBtn.addEventListener('click', () => {
     chatPanel.classList.toggle('active');
+    
+    // 移除未读消息指示器
+    if (chatPanel.classList.contains('active')) {
+      toggleChatBtn.classList.remove('has-new-message');
+    }
   });
   
   // 关闭聊天面板
@@ -388,15 +825,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatPanel.classList.remove('active');
   });
   
-  // 发送消息
+  // 发送消息按钮点击
   sendMessageBtn.addEventListener('click', () => {
-    sendChatMessage(messageInput.value);
+    sendChatMessage();
   });
   
-  // 按回车键发送消息
+  // 发送消息输入框按Enter键发送
   messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      sendChatMessage(messageInput.value);
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
     }
   });
   
@@ -415,23 +853,77 @@ document.addEventListener('DOMContentLoaded', async () => {
     leaveMeeting();
   });
   
-  // 模拟远程参与者进入/离开 (仅用于演示)
-  function simulatePeerEvents() {
-    // 模拟参与者进入
-    if (isMeetingHost) {
-      setTimeout(() => {
-        simulateRemoteParticipant('参与者1');
-      }, 5000);
-      
-      setTimeout(() => {
-        simulateRemoteParticipant('参与者2');
-      }, 8000);
+  // 键盘快捷键
+  // document.addEventListener('keydown', (e) => {
+  //   // Alt+V 切换摄像头
+  //   if (e.altKey && e.key === 'v') {
+  //     cameraEnabled = !cameraEnabled;
+  //     updateMediaUI();
+  //   }
+    
+  //   // Alt+M 切换麦克风
+  //   if (e.altKey && e.key === 'm') {
+  //     micEnabled = !micEnabled;
+  //     updateMediaUI();
+  //   }
+    
+  //   // Alt+C 打开/关闭聊天
+  //   if (e.altKey && e.key === 'c') {
+  //     chatPanel.classList.toggle('active');
+  //   }
+    
+  //   // Esc 关闭模态框或聊天面板
+  //   if (e.key === 'Escape') {
+  //     if (leaveConfirmModal.classList.contains('active')) {
+  //       leaveConfirmModal.classList.remove('active');
+  //     } else if (chatPanel.classList.contains('active')) {
+  //       chatPanel.classList.remove('active');
+  //     }
+  //   }
+  // });
+  
+  // 窗口关闭前确认
+  // window.addEventListener('beforeunload', (e) => {
+  //   if (isConnectionEstablished) {
+  //     e.preventDefault();
+  //     e.returnValue = '离开页面将退出当前会议，是否确定？';
+  //     return e.returnValue;
+  //   }
+  // });
+
+  // 处理页面卸载，确保资源释放
+  window.addEventListener('unload', () => {
+    // 关闭所有连接并释放资源
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
     }
-  }
+    
+    Object.keys(peerConnections).forEach(peerId => {
+      if (peerConnections[peerId].connection) {
+        peerConnections[peerId].connection.close();
+      }
+    });
+    
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      websocket.close();
+    }
+  });
+  
+  // 添加一个监听器来处理视频元素加载错误
+  document.addEventListener('error', (e) => {
+    if (e.target.tagName === 'VIDEO') {
+      window.electronConsole.error('视频加载错误:', e);
+      // 显示错误占位符
+      const videoContainer = e.target.closest('.video-container');
+      if (videoContainer) {
+        const noVideoOverlay = videoContainer.querySelector('.no-video-overlay');
+        if (noVideoOverlay) {
+          noVideoOverlay.classList.remove('hidden');
+        }
+      }
+    }
+  }, true);
   
   // 开始初始化
   initialize();
-  
-  // 模拟参与者事件 (仅用于演示)
-  simulatePeerEvents();
 });

@@ -504,3 +504,103 @@ body {
     gap: 12px;
   }
 }
+
+/* WebRTC相关状态指示器样式 */
+.has-new-message {
+  position: relative;
+}
+
+.has-new-message::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background-color: #ff3b30;
+  border-radius: 50%;
+}
+
+/* 优化视频容器在连接中的状态 */
+.video-container.connecting {
+  position: relative;
+}
+
+.video-container.connecting::before {
+  content: '连接中...';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 8px 16px;
+  border-radius: 20px;
+  z-index: 1;
+}
+
+/* 加载覆盖层样式 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #e0e0e0;
+  border-top: 5px solid #0084ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 优化无视频显示 */
+.no-video-overlay {
+  background-color: #f0f4f8;
+  /* display: flex; */
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* 连接状态相关样式 */
+.video-container[data-connection-state="new"],
+.video-container[data-connection-state="connecting"],
+.video-container[data-connection-state="checking"] {
+  background-color: rgba(224, 229, 236, 0.7);
+}
+
+.video-container[data-connection-state="failed"],
+.video-container[data-connection-state="disconnected"] {
+  background-color: rgba(255, 59, 48, 0.1);
+}
+
+/* 优化聊天面板在有新消息时的样式 */
+@keyframes highlight {
+  0% { background-color: rgba(0, 132, 255, 0.1); }
+  50% { background-color: rgba(0, 132, 255, 0.2); }
+  100% { background-color: rgba(0, 132, 255, 0.1); }
+}
+
+.chat-message.incoming.new {
+  animation: highlight 1s ease-in-out;
+}

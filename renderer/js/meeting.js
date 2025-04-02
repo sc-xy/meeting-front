@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 创建会议按钮事件
     const createMeetingBtn = document.getElementById('createMeetingBtn');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+    
     createMeetingBtn.addEventListener('click', async () => {
       showLoading("正在创建会议...");
       
@@ -33,16 +36,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (result.success) {
           // 保存会议ID，跳转到会议室页面
           localStorage.setItem('currentMeetingId', result.meetingId);
-          localStorage.setItem('isMeetingHost', 'true');
           window.electronAPI.navigate('room.html');
         } else {
           hideLoading();
-          alert('创建会议失败: ' + result.message);
+          showError('创建会议失败', result.message);
         }
       } catch (error) {
         hideLoading();
         console.error('创建会议出错:', error);
-        alert('创建会议过程中发生错误，请稍后重试');
+        showError('创建会议错误', '创建会议过程中发生错误，请稍后重试');
       }
     });
     
@@ -54,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const meetingId = meetingIdInput.value.trim();
       
       if (!meetingId) {
-        alert('请输入会议ID');
+        showError('输入错误', '请输入会议ID');
         meetingIdInput.focus();
         return;
       }
@@ -67,16 +69,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (result.success) {
           // 保存会议ID，跳转到会议室页面
           localStorage.setItem('currentMeetingId', meetingId);
-          localStorage.setItem('isMeetingHost', 'false');
           window.electronAPI.navigate('room.html');
         } else {
           hideLoading();
-          alert('加入会议失败: ' + result.message);
+          showError('加入会议失败', result.message);
         }
       } catch (error) {
         hideLoading();
         console.error('加入会议出错:', error);
-        alert('加入会议过程中发生错误，请稍后重试');
+        showError('加入会议错误', '加入会议过程中发生错误，请稍后重试');
       }
     });
     
@@ -89,16 +90,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 显示加载状态
     function showLoading(message) {
-      const loadingOverlay = document.getElementById('loadingOverlay');
-      const loadingText = document.getElementById('loadingText');
-      
       loadingText.textContent = message || '正在加载...';
       loadingOverlay.classList.add('active');
     }
     
     // 隐藏加载状态
     function hideLoading() {
-      const loadingOverlay = document.getElementById('loadingOverlay');
       loadingOverlay.classList.remove('active');
+    }
+    
+    // 显示错误弹窗 - 添加这个函数来展示更好的错误提示
+    function showError(title, message) {
+      // 创建错误弹窗
+      const errorModalHTML = `
+        <div class="error-modal-overlay">
+          <div class="error-modal">
+            <div class="error-header">
+              <h3>${title}</h3>
+              <button class="close-error">&times;</button>
+            </div>
+            <div class="error-body">
+              <p>${message}</p>
+            </div>
+            <div class="error-footer">
+              <button class="error-ok-btn">确定</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // 添加到DOM
+      const errorContainer = document.createElement('div');
+      errorContainer.innerHTML = errorModalHTML;
+      document.body.appendChild(errorContainer);
+      
+      // 添加事件监听
+      const overlay = document.querySelector('.error-modal-overlay');
+      const closeBtn = document.querySelector('.close-error');
+      const okBtn = document.querySelector('.error-ok-btn');
+      
+      function closeModal() {
+        overlay.classList.add('fade-out');
+        setTimeout(() => {
+          document.body.removeChild(errorContainer);
+        }, 300);
+      }
+      
+      closeBtn.addEventListener('click', closeModal);
+      okBtn.addEventListener('click', closeModal);
     }
   });

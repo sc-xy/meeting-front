@@ -231,3 +231,156 @@
       padding: 20px;
     }
   }
+
+/* 错误弹窗样式 */
+.error-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
+  }
+  
+  .error-modal-overlay.fade-out {
+    animation: fadeOut 0.3s ease-in forwards;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  
+  .error-modal {
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    width: 400px;
+    max-width: 90%;
+    overflow: hidden;
+    animation: slideIn 0.2s ease-out;
+  }
+  
+  @keyframes slideIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  
+  .error-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .error-header h3 {
+    color: #d32f2f;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+  }
+  
+  .close-error {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+  }
+  
+  .close-error:hover {
+    background-color: #f0f0f0;
+  }
+  
+  .error-body {
+    padding: 20px;
+  }
+  
+  .error-body p {
+    margin: 0;
+    color: #333;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  
+  .error-footer {
+    padding: 10px 20px 20px;
+    text-align: right;
+  }
+  
+  .error-ok-btn {
+    background-color: #0084ff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .error-ok-btn:hover {
+    background-color: #0069d9;
+  }
+  
+  /* 确保加载遮罩层正确显示 */
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+  }
+  
+  .loading-overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  .spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #e0e0e0;
+    border-top: 5px solid #0084ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+  
+  #loadingText {
+    font-size: 18px;
+    color: #333;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }

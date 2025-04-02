@@ -4,10 +4,17 @@ const axios = require('axios');
 
 // 后端API基础URL
 const API_BASE_URL = 'http://localhost:8101/api';
+const MEETING_CREATE_API_URL = 'http://localhost:8101/api/meeting/create';
+const MEETING_QUERY_API_URL = 'http://localhost:8101/api/meeting/query';
 
+// 窗口管理
 let mainWindow;
+
 // 存储当前登录用户信息
 let currentUser = null;
+
+// 存储当前会议信息
+let currentMeetingInfo = null;
 
 function createWindow() {
   // 创建浏览器窗口
@@ -132,45 +139,106 @@ ipcMain.on('logout', () => {
 
 // 创建会议
 ipcMain.handle('create-meeting', async () => {
-  // 生成随机会议ID
-  const meetingId = Math.random().toString(36).substring(2, 10).toUpperCase();
-  
-  // 这里会与后端通信创建会议
-  console.log(`创建会议: ${meetingId}`);
-  
-  return {
-    success: true,
-    meetingId: meetingId
-  };
+    try {
+      if (!currentUser || !currentUser.id) {
+        return { 
+          success: false, 
+          message: '用户未登录或会话已过期' 
+        };
+      }
+      
+      const response = await axios.post(MEETING_CREATE_API_URL, {
+        userid: currentUser.id
+      });
+      
+      // 检查响应状态
+      if (response.data && response.data.code === 0) {
+        // 存储会议信息
+        currentMeetingInfo = response.data.data;
+        
+        return {
+          success: true,
+          meetingId: response.data.data.meetingId
+        };
+      } else {
+        return { 
+          success: false, 
+          message: response.data.message || '创建会议失败' 
+        };
+      }
+    } catch (error) {
+      console.error('创建会议请求出错:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || '网络错误，请稍后重试' 
+      };
+    }
 });
-
+  
 // 加入会议
 ipcMain.handle('join-meeting', async (event, meetingId) => {
-  if (!meetingId) {
-    return { success: false, message: '会议ID不能为空' };
-  }
-  
-  // 这里会与后端通信验证会议
-  console.log(`加入会议: ${meetingId}`);
-  
-  return { 
-    success: true,
-    meetingId: meetingId
-  };
+    try {
+        if (!currentUser || !currentUser.id) {
+        return { 
+            success: false, 
+            message: '用户未登录或会话已过期' 
+        };
+        }
+        
+        if (!meetingId) {
+        return { 
+            success: false, 
+            message: '请输入有效的会议ID' 
+        };
+        }
+        
+        const response = await axios.post(MEETING_QUERY_API_URL, {
+        meetingId: meetingId
+        });
+        
+        // 检查响应状态
+        if (response.data && response.data.code === 0) {
+        // 存储会议信息
+        currentMeetingInfo = response.data.data;
+        
+        return {
+            success: true,
+            meetingId: response.data.data.meetingId
+        };
+        } else {
+        return { 
+            success: false, 
+            message: response.data.message || '会议不存在或已结束' 
+        };
+        }
+    } catch (error) {
+        console.error('查询会议请求出错:', error);
+        return { 
+        success: false, 
+        message: error.response?.data?.message || '网络错误，请稍后重试' 
+        };
+    }
+});
+
+// 获取会议信息
+ipcMain.handle('get-meeting-info', async () => {
+    return currentMeetingInfo;
+});
+
+// 清除会议信息（离开会议时）
+ipcMain.on('leave-meeting', () => {
+    console.log('用户离开会议')
+
+    currentMeetingInfo = null;
+
+    console.log('currentMeetingInfo: ', currentMeetingInfo);
+    // 原有的导航逻辑保持不变
+    mainWindow.loadFile(path.join(__dirname, 'renderer', 'meeting.html'));
 });
 
 // 导航到其他页面
 ipcMain.on('navigate', (event, page) => {
   mainWindow.loadFile(path.join(__dirname, 'renderer', page));
-});
-
-// 离开会议
-ipcMain.on('leave-meeting', () => {
-  // 这里会与后端通信，通知用户离开会议
-  console.log('用户离开会议');
-  
-  // 导航到会议页面
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'meeting.html'));
 });
   
 // 获取STUN/TURN服务器信息
@@ -183,3 +251,24 @@ ipcMain.handle('get-ice-servers', async () => {
     ]
   };
 }); 
+
+// 处理渲染进程打印日志
+ipcMain.handle('log', (event, ...args) => {
+    console.log(...args);
+})
+
+ipcMain.handle('error', (event, ...args) => {
+    console.error(...args);
+})
+
+ipcMain.handle('warn', (event, ...args) => {
+    console.warn(...args);
+})
+
+ipcMain.handle('info', (event, ...args) => {
+    console.info(...args);
+})
+
+ipcMain.handle('debug', (event, ...args) => {
+    console.debug(...args);
+})
